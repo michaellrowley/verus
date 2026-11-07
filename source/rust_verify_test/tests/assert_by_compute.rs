@@ -4,6 +4,25 @@ mod common;
 use common::*;
 
 test_verify_one_file! {
+    #[test] slice_view_in_open_spec_by_compute verus_code! {
+        use vstd::prelude::*;
+
+        pub open spec fn first_byte(bytes: Seq<u8>) -> u8 {
+            bytes[0]
+        }
+
+        fn read_first_byte(bytes: &[u8]) -> (value: u8)
+            requires bytes.len() > 0,
+            ensures value == first_byte(bytes@),
+        {
+            let value = bytes[0];
+            assert(value == first_byte(bytes@)) by (compute);
+            value
+        }
+    } => Ok(())
+}
+
+test_verify_one_file! {
     #[test] bit_vectors verus_code! {
 
         spec fn shifter(x: u64, amt: usize) -> u64
