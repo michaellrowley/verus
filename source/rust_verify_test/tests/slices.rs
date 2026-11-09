@@ -1593,3 +1593,43 @@ test_verify_one_file! {
         }
     } => Err(err) => assert_fails(err, 3)
 }
+
+test_verify_one_file! {
+    #[test] test_axis_workspace_value_slice_view_air_panic verus_code! {
+        use vstd::prelude::*;
+
+        pub open spec fn little_endian_tensor_bits(bytes: Seq<u8>, offset: int, byte_width: int) -> u64 {
+            if offset < 0 || !(byte_width == 1 || byte_width == 2 || byte_width == 4 || byte_width == 8) || offset + byte_width > bytes.len() { 0 }
+            else if byte_width == 1 { bytes[offset] as u64 }
+            else if byte_width == 2 { bytes[offset] as u64 | ((bytes[offset + 1] as u64) << 8) }
+            else if byte_width == 4 { bytes[offset] as u64 | ((bytes[offset + 1] as u64) << 8) | ((bytes[offset + 2] as u64) << 16) | ((bytes[offset + 3] as u64) << 24) }
+            else if byte_width == 8 { bytes[offset] as u64 | ((bytes[offset + 1] as u64) << 8) | ((bytes[offset + 2] as u64) << 16) | ((bytes[offset + 3] as u64) << 24) | ((bytes[offset + 4] as u64) << 32) | ((bytes[offset + 5] as u64) << 40) | ((bytes[offset + 6] as u64) << 48) | ((bytes[offset + 7] as u64) << 56) }
+            else { 0 }
+        }
+
+        fn read_u64_le(bytes: [u8; 8]) -> (value: u64)
+            ensures little_endian_tensor_bits(bytes@, 0, 8) == value,
+        {
+            (bytes[0] as u64) | ((bytes[1] as u64) << 8) | ((bytes[2] as u64) << 16) | ((bytes[3] as u64) << 24) | ((bytes[4] as u64) << 32) | ((bytes[5] as u64) << 40) | ((bytes[6] as u64) << 48) | ((bytes[7] as u64) << 56)
+        }
+
+        pub open spec fn axis_workspace_value_spec(workspace: Seq<u8>, axis_index: int) -> u64
+            recommends 0 <= axis_index, axis_index * 8 + 8 <= workspace.len(),
+        {
+            little_endian_tensor_bits(workspace, axis_index * 8, 8)
+        }
+
+        fn axis_workspace_value(workspace: &[u8], axis_index: usize) -> (axis: u64)
+            requires axis_index < workspace.len() / 8,
+            ensures axis == axis_workspace_value_spec(workspace@, axis_index as int),
+        {
+            let byte_offset = axis_index * 8;
+            let axis = read_u64_le([
+                workspace[byte_offset], workspace[byte_offset + 1], workspace[byte_offset + 2], workspace[byte_offset + 3],
+                workspace[byte_offset + 4], workspace[byte_offset + 5], workspace[byte_offset + 6], workspace[byte_offset + 7],
+            ]);
+            assert(axis == axis_workspace_value_spec(workspace@, axis_index as int)) by (compute);
+            axis
+        }
+    } => Ok(())
+}
